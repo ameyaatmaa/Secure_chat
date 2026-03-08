@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureChat</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" x-data="secureChat()" x-init="init()">
+
+        <!-- Navigation -->
+        <nav x-show="auth.loggedIn">
+            <span x-text="'Hello, ' + auth.username"></span>
+            <a href="#" @click="navigate('inbox')">Inbox</a>
+            <a href="#" @click="navigate('send')">Send</a>
+            <a href="#" @click="logout()">Logout</a>
+        </nav>
+
+        <!-- Login View -->
+        <div x-show="view === 'login'" class="card">
+            <h2>Login</h2>
+            <input x-model="form.username" type="text" placeholder="Username">
+            <input x-model="form.password" type="password" placeholder="Password">
+            <button @click="login()">Login</button>
+            <p>No account? <a href="#" @click="navigate('register')">Register</a></p>
+            <p class="error" x-text="error"></p>
+        </div>
+
+        <!-- Register View -->
+        <div x-show="view === 'register'" class="card">
+            <h2>Register</h2>
+            <input x-model="form.username" type="text" placeholder="Username">
+            <input x-model="form.password" type="password" placeholder="Password (min 8 chars)">
+            <button @click="register()">Register</button>
+            <p>Have an account? <a href="#" @click="navigate('login')">Login</a></p>
+            <p class="error" x-text="error"></p>
+            <p class="info" x-text="info"></p>
+        </div>
+
+        <!-- Inbox View -->
+        <div x-show="view === 'inbox'" class="card">
+            <h2>Inbox</h2>
+            <div x-show="messages.length === 0" class="empty">No messages yet.</div>
+            <template x-for="msg in messages" :key="msg.id">
+                <div class="message-item" @click="openMessage(msg.id)">
+                    <span x-text="'From: ' + msg.senderUsername"></span>
+                    <span x-text="new Date(msg.createdAt).toLocaleString()"></span>
+                </div>
+            </template>
+        </div>
+
+        <!-- Send View -->
+        <div x-show="view === 'send'" class="card">
+            <h2>Send Encrypted Message</h2>
+            <input x-model="sendForm.receiver" type="text" placeholder="Receiver username">
+            <textarea x-model="sendForm.message" placeholder="Your secret message"></textarea>
+            <input type="file" @change="handleImageUpload($event)" accept=".png,.bmp">
+            <div id="map" style="height:300px;"></div>
+            <p class="info" x-show="sendForm.lat">
+                Location set: <span x-text="sendForm.lat.toFixed(5) + ', ' + sendForm.lon.toFixed(5)"></span>
+            </p>
+            <button @click="sendMessage()" :disabled="sending">
+                <span x-text="sending ? 'Encrypting & Sending...' : 'Send Message'"></span>
+            </button>
+            <p class="error" x-text="error"></p>
+            <p class="info" x-text="info"></p>
+        </div>
+
+        <!-- View Message -->
+        <div x-show="view === 'view'" class="card">
+            <h2>Decrypt Message</h2>
+            <button @click="decryptMessage()">Unlock with My Location</button>
+            <div x-show="decrypted" class="decrypted-msg">
+                <h3>Message:</h3>
+                <p x-text="decrypted"></p>
+            </div>
+            <p class="error" x-text="error"></p>
+            <a href="#" @click="navigate('inbox')">&larr; Back to inbox</a>
+        </div>
+
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
