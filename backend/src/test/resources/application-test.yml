@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/securechat_test
+    username: chatuser
+    password: strongpassword
+  flyway:
+    enabled: true
