@@ -42,11 +42,11 @@ public class MessageController {
     }
 
     @GetMapping("/inbox")
-    public ResponseEntity<List<Map<String, Object>>> inbox(
+    public ResponseEntity<?> inbox(
             @AuthenticationPrincipal UserDetails user) {
-        List<Map<String, Object>> result = messageService.getInbox(user.getUsername())
+        var result = messageService.getInbox(user.getUsername())
                 .stream()
-                .map(m -> Map.of(
+                .map(m -> Map.<String, Object>of(
                         "id", m.getId(),
                         "senderUsername", m.getSender().getUsername(),
                         "createdAt", m.getCreatedAt()
