@@ -31,6 +31,9 @@ public class User {
     @Column(name = "created_at")
     private Instant createdAt;
 
+    @Column(name = "last_seen")
+    private Instant lastSeen;
+
     @PrePersist
     protected void onCreate() {
         createdAt = Instant.now();
