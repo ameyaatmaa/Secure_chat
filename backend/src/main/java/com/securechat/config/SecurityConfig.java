@@ -32,11 +32,11 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
-                .requestMatchers("/", "/error", "/index.html", "/app.js", "/style.css", "/favicon.ico").permitAll()
+                .requestMatchers("/", "/error", "/index.html", "/app.js", "/style.css", "/favicon.ico", "/forge/**").permitAll()
                 .anyRequest().authenticated()
             )
             .headers(headers -> headers
-                .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
+                .httpStrictTransportSecurity(hsts -> hsts.disable())
                 .frameOptions(frame -> frame.deny())
                 .contentTypeOptions(ct -> {})
                 .referrerPolicy(ref -> ref.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
