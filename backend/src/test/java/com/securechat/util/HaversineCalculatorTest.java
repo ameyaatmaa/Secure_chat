@@ -12,9 +12,10 @@ class HaversineCalculatorTest {
     }
 
     @Test
-    void knownDistance_bengaluruToMysuru_isApprox140km() {
+    void knownDistance_bengaluruToMysuru_isApprox128km() {
+        // Great-circle (Haversine) distance ~128km; road distance is ~140km
         double dist = HaversineCalculator.distanceMeters(12.9716, 77.5946, 12.2958, 76.6394);
-        assertThat(dist).isBetween(138_000.0, 142_000.0);
+        assertThat(dist).isBetween(126_000.0, 130_000.0);
     }
 
     @Test

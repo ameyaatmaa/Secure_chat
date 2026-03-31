@@ -2,6 +2,7 @@ package com.securechat.service;
 
 import org.springframework.stereotype.Service;
 
+import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.nio.ByteBuffer;
 
@@ -97,7 +98,12 @@ public class SteganographyService {
 
     private BufferedImage copyImage(BufferedImage src) {
         BufferedImage copy = new BufferedImage(src.getWidth(), src.getHeight(), BufferedImage.TYPE_INT_RGB);
-        copy.getGraphics().drawImage(src, 0, 0, null);
+        Graphics2D g = copy.createGraphics();
+        try {
+            g.drawImage(src, 0, 0, null);
+        } finally {
+            g.dispose();
+        }
         return copy;
     }
 }
