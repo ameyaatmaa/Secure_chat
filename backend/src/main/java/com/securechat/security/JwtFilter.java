@@ -1,5 +1,6 @@
 package com.securechat.security;
 
+import com.securechat.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Arrays;
 
 @Component
@@ -19,10 +21,13 @@ public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
     private final UserDetailsService userDetailsService;
+    private final UserRepository userRepository;
 
-    public JwtFilter(JwtProvider jwtProvider, UserDetailsService userDetailsService) {
+    public JwtFilter(JwtProvider jwtProvider, UserDetailsService userDetailsService,
+                     UserRepository userRepository) {
         this.jwtProvider = jwtProvider;
         this.userDetailsService = userDetailsService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -38,6 +43,11 @@ public class JwtFilter extends OncePerRequestFilter {
             var auth = new UsernamePasswordAuthenticationToken(
                     userDetails, null, userDetails.getAuthorities());
             SecurityContextHolder.getContext().setAuthentication(auth);
+
+            userRepository.findByUsername(username).ifPresent(u -> {
+                u.setLastSeen(Instant.now());
+                userRepository.save(u);
+            });
         }
         filterChain.doFilter(request, response);
     }
