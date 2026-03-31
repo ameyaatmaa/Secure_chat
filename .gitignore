@@ -1,0 +1,5 @@
+LOCAL_PROJECT_DOCS.md
+.env
+backend/target/
+backend/images/
+*.pdf

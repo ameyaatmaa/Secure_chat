@@ -1,6 +1,5 @@
 package com.securechat.config;
 
-import com.securechat.repository.UserRepository;
 import com.securechat.security.JwtFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,7 +9,6 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.*;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -22,11 +20,9 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
-    private final UserRepository userRepository;
 
-    public SecurityConfig(JwtFilter jwtFilter, UserRepository userRepository) {
+    public SecurityConfig(JwtFilter jwtFilter) {
         this.jwtFilter = jwtFilter;
-        this.userRepository = userRepository;
     }
 
     @Bean
@@ -36,7 +32,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
-                .requestMatchers("/", "/index.html", "/app.js", "/style.css").permitAll()
+                .requestMatchers("/", "/error", "/index.html", "/app.js", "/style.css", "/favicon.ico").permitAll()
                 .anyRequest().authenticated()
             )
             .headers(headers -> headers
@@ -48,16 +44,6 @@ public class SecurityConfig {
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
-    }
-
-    @Bean
-    public UserDetailsService userDetailsService() {
-        return username -> userRepository.findByUsername(username)
-                .map(user -> User.withUsername(user.getUsername())
-                        .password(user.getPasswordHash())
-                        .authorities("ROLE_USER")
-                        .build())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
     }
 
     @Bean
