@@ -31,6 +31,7 @@ public class MessageController {
     public ResponseEntity<?> send(
             @AuthenticationPrincipal UserDetails user,
             @RequestParam(value = "image", required = false) MultipartFile image,
+            @RequestParam(value = "stegoImage", required = false) MultipartFile stegoImage,
             @RequestParam("encryptedPayload") String encryptedPayload,
             @RequestParam("encryptedKey") String encryptedKey,
             @RequestParam("keyShard") String keyShard,
@@ -53,6 +54,11 @@ public class MessageController {
         if (file != null && !file.isEmpty()) {
             msg = messageService.sendDocument(user.getUsername(), receiverUsername,
                     file, encryptedPayload, encryptedKey, keyShard,
+                    lat, lon, radius, geoLocked, burnAfterRead);
+        } else if (stegoImage != null && !stegoImage.isEmpty()) {
+            // Client already embedded payload via LSB — just store the image as-is
+            msg = messageService.sendPreEmbeddedMessage(user.getUsername(), receiverUsername,
+                    stegoImage, encryptedKey, keyShard,
                     lat, lon, radius, geoLocked, burnAfterRead);
         } else {
             msg = messageService.sendMessage(user.getUsername(), receiverUsername,

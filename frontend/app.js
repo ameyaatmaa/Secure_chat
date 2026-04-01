@@ -196,19 +196,46 @@ function secureChat() {
             }
         },
 
-        generateNoiseImage() {
+        // Generate noise image AND embed payload via LSB client-side
+        // This avoids Java ImageIO color space conversion that corrupts LSB data
+        generateStegoImage(payloadBytes) {
             const canvas = document.createElement('canvas');
             canvas.width = 512;
             canvas.height = 512;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
             const imageData = ctx.createImageData(512, 512);
-            const data = imageData.data;
-            for (let i = 0; i < data.length; i += 4) {
-                data[i] = Math.floor(Math.random() * 256);
-                data[i + 1] = Math.floor(Math.random() * 256);
-                data[i + 2] = Math.floor(Math.random() * 256);
-                data[i + 3] = 255;
+            const pixels = imageData.data;
+
+            // Fill with random noise
+            for (let i = 0; i < pixels.length; i += 4) {
+                pixels[i] = Math.floor(Math.random() * 256);
+                pixels[i + 1] = Math.floor(Math.random() * 256);
+                pixels[i + 2] = Math.floor(Math.random() * 256);
+                pixels[i + 3] = 255;
             }
+
+            // Prepend 4-byte big-endian length header
+            const header = new Uint8Array(4);
+            header[0] = (payloadBytes.length >> 24) & 0xFF;
+            header[1] = (payloadBytes.length >> 16) & 0xFF;
+            header[2] = (payloadBytes.length >> 8) & 0xFF;
+            header[3] = payloadBytes.length & 0xFF;
+
+            const fullData = new Uint8Array(4 + payloadBytes.length);
+            fullData.set(header, 0);
+            fullData.set(payloadBytes, 4);
+
+            // Embed bits into LSBs of R, G, B channels
+            const totalBits = fullData.length * 8;
+            for (let i = 0; i < totalBits; i++) {
+                const pixelIdx = Math.floor(i / 3) * 4;
+                const channel = i % 3;
+                const byteIdx = Math.floor(i / 8);
+                const bitPos = 7 - (i % 8);
+                const bit = (fullData[byteIdx] >> bitPos) & 1;
+                pixels[pixelIdx + channel] = (pixels[pixelIdx + channel] & 0xFE) | bit;
+            }
+
             ctx.putImageData(imageData, 0, 0);
             return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
         },
@@ -300,8 +327,10 @@ function secureChat() {
                 if (this.sendMode === 'document') {
                     formData.append('file', this.sendForm.file);
                 } else {
-                    const noiseBlob = await this.generateNoiseImage();
-                    formData.append('image', noiseBlob, 'noise.png');
+                    // Client-side LSB embedding into noise image
+                    // This avoids server-side ImageIO color space conversion
+                    const stegoBlob = await this.generateStegoImage(payload);
+                    formData.append('stegoImage', stegoBlob, 'stego.png');
                 }
 
                 const res = await fetch('/api/messages/send', { method: 'POST', body: formData });
@@ -493,7 +522,8 @@ async function extractLsbPayload(imageBlob) {
             const canvas = document.createElement('canvas');
             canvas.width = img.width;
             canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
+            // Disable color space conversion to preserve exact pixel values
+            const ctx = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true });
             ctx.drawImage(img, 0, 0);
             const data = ctx.getImageData(0, 0, img.width, img.height).data;
 

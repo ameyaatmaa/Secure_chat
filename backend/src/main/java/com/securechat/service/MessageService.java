@@ -100,6 +100,49 @@ public class MessageService {
         return messageRepository.save(message);
     }
 
+    public Message sendPreEmbeddedMessage(String senderUsername, String receiverUsername,
+                                           MultipartFile stegoImage, String encryptedKey, String keyShard,
+                                           Double lat, Double lon, int radius,
+                                           boolean geoLocked, boolean burnAfterRead) throws Exception {
+        if (senderUsername.equals(receiverUsername)) {
+            throw new IllegalArgumentException("Cannot send a message to yourself");
+        }
+
+        User sender = userRepository.findByUsername(senderUsername)
+                .orElseThrow(() -> new IllegalArgumentException("Sender not found"));
+        User receiver = userRepository.findByUsername(receiverUsername)
+                .orElseThrow(() -> new NotFoundException("Receiver not found"));
+
+        if (geoLocked) {
+            if (lat == null || lon == null) {
+                throw new IllegalArgumentException("Geo-locked messages require coordinates");
+            }
+            if (!geoLocationService.isCoarseValid(lat, lon)) {
+                throw new IllegalArgumentException("Invalid sender coordinates");
+            }
+        }
+
+        // Store the pre-embedded stego image directly — no server-side LSB processing
+        String filename = UUID.randomUUID() + ".png";
+        Files.copy(stegoImage.getInputStream(), imageStoragePath.resolve(filename));
+
+        Instant now = Instant.now();
+        Message message = Message.builder()
+                .sender(sender)
+                .receiver(receiver)
+                .imageFilename(filename)
+                .encryptedKey(encryptedKey)
+                .keyShard(keyShard)
+                .senderLat(lat)
+                .senderLon(lon)
+                .radiusMeters(radius)
+                .geoLocked(geoLocked)
+                .burnAfterRead(burnAfterRead)
+                .expiresAt(now.plusSeconds((long) expiryMinutes * 60))
+                .build();
+        return messageRepository.save(message);
+    }
+
     public Message sendDocument(String senderUsername, String receiverUsername,
                                  MultipartFile file, String encryptedPayloadBase64,
                                  String encryptedKey, String keyShard,
