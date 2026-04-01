@@ -9,11 +9,32 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <!-- Scanline overlay -->
     <div class="scanline"></div>
+
+    <!-- Animated background canvas -->
+    <div class="bg-canvas">
+        <div class="bg-mesh"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
 
     <div id="app" x-data="secureChat()" x-init="init()">
 
-        <!-- status bar (top) -->
+        <!-- ═══════════════════════════════════════
+             STATUS BAR (top)
+        ════════════════════════════════════════ -->
         <header class="statusbar" x-show="auth.loggedIn">
             <div class="statusbar-left">
                 <span class="tag tag-cyan">securechat</span>
@@ -31,174 +52,200 @@
             </div>
         </header>
 
-        <!-- login -->
+        <!-- ═══════════════════════════════════════
+             LOGIN
+        ════════════════════════════════════════ -->
         <div x-show="view === 'login'" class="window" x-transition>
-            <div class="window-title">[ login ]</div>
-            <div class="window-body">
-                <div class="field">
-                    <label>username</label>
-                    <input x-model="form.username" type="text" placeholder="enter username" @keydown.enter="login()">
+            <div class="window-inner">
+                <div class="window-title">[ login ]</div>
+                <div class="window-body">
+                    <div class="field">
+                        <label>username</label>
+                        <input x-model="form.username" type="text" placeholder="enter username" @keydown.enter="login()">
+                    </div>
+                    <div class="field">
+                        <label>password</label>
+                        <input x-model="form.password" type="password" placeholder="enter password" @keydown.enter="login()">
+                    </div>
+                    <button @click="login()" class="btn btn-cyan" :disabled="loading" :class="loading ? 'btn-loading' : ''">
+                        <span x-text="loading ? 'deriving keys...' : '> login'"></span>
+                    </button>
+                    <p class="link-text">no account? <a href="#" @click.prevent="navigate('register')">register</a></p>
+                    <p class="error" x-show="error" x-text="error"></p>
                 </div>
-                <div class="field">
-                    <label>password</label>
-                    <input x-model="form.password" type="password" placeholder="enter password" @keydown.enter="login()">
-                </div>
-                <button @click="login()" class="btn btn-cyan" :disabled="loading">
-                    <span x-text="loading ? 'deriving keys...' : '> login'"></span>
-                </button>
-                <p class="link-text">no account? <a href="#" @click.prevent="navigate('register')">register</a></p>
-                <p class="error" x-show="error" x-text="error"></p>
             </div>
         </div>
 
-        <!-- register -->
+        <!-- ═══════════════════════════════════════
+             REGISTER
+        ════════════════════════════════════════ -->
         <div x-show="view === 'register'" class="window" x-transition>
-            <div class="window-title">[ register ]</div>
-            <div class="window-body">
-                <div class="field">
-                    <label>username</label>
-                    <input x-model="form.username" type="text" placeholder="3-50 chars, alphanumeric">
+            <div class="window-inner">
+                <div class="window-title">[ register ]</div>
+                <div class="window-body">
+                    <div class="field">
+                        <label>username</label>
+                        <input x-model="form.username" type="text" placeholder="3-50 chars, alphanumeric">
+                    </div>
+                    <div class="field">
+                        <label>password</label>
+                        <input x-model="form.password" type="password" placeholder="min 8 characters">
+                    </div>
+                    <button @click="register()" class="btn btn-magenta" :disabled="loading" :class="loading ? 'btn-loading' : ''">
+                        <span x-text="loading ? 'generating rsa keypair...' : '> register'"></span>
+                    </button>
+                    <p class="link-text">have an account? <a href="#" @click.prevent="navigate('login')">login</a></p>
+                    <p class="error" x-show="error" x-text="error"></p>
+                    <p class="success" x-show="info" x-text="info"></p>
                 </div>
-                <div class="field">
-                    <label>password</label>
-                    <input x-model="form.password" type="password" placeholder="min 8 characters">
-                </div>
-                <button @click="register()" class="btn btn-magenta" :disabled="loading">
-                    <span x-text="loading ? 'generating rsa keypair...' : '> register'"></span>
-                </button>
-                <p class="link-text">have an account? <a href="#" @click.prevent="navigate('login')">login</a></p>
-                <p class="error" x-show="error" x-text="error"></p>
-                <p class="success" x-show="info" x-text="info"></p>
             </div>
         </div>
 
-        <!-- inbox -->
+        <!-- ═══════════════════════════════════════
+             INBOX
+        ════════════════════════════════════════ -->
         <div x-show="view === 'inbox'" class="window window-wide" x-transition>
-            <div class="window-title">[ inbox ] <span class="dim" x-show="messages.length > 0" x-text="messages.length + ' messages'"></span></div>
-            <div class="window-body">
-                <div x-show="messages.length === 0" class="empty">no messages yet. waiting for incoming transmissions...</div>
-                <template x-for="msg in messages" :key="msg.id">
-                    <div class="msg-item" @click="openMessage(msg)" :class="{ 'msg-expired': msg.expired, 'msg-unread': !msg.isRead && !msg.expired }">
-                        <div class="msg-item-left">
-                            <span class="msg-sender" x-text="msg.senderUsername"></span>
-                            <span class="msg-meta">
-                                <span x-show="msg.isDocument" class="tag tag-small tag-orange">doc</span>
-                                <span x-show="msg.burnAfterRead" class="tag tag-small tag-red">burn</span>
-                                <span x-show="msg.geoLocked" class="tag tag-small tag-cyan">geo</span>
-                                <span x-show="msg.expired" class="tag tag-small tag-dim">expired</span>
-                            </span>
+            <div class="window-inner">
+                <div class="window-title">
+                    [ inbox ]
+                    <span class="dim" x-show="messages.length > 0" x-text="messages.length + ' messages'"></span>
+                </div>
+                <div class="window-body">
+                    <div x-show="messages.length === 0" class="empty">no messages yet. waiting for incoming transmissions...</div>
+                    <template x-for="msg in messages" :key="msg.id">
+                        <div class="msg-item" @click="openMessage(msg)" :class="{ 'msg-expired': msg.expired, 'msg-unread': !msg.isRead && !msg.expired }">
+                            <div class="msg-item-left">
+                                <span class="msg-sender" x-text="msg.senderUsername"></span>
+                                <span class="msg-meta">
+                                    <span x-show="msg.isDocument" class="tag tag-small tag-orange">doc</span>
+                                    <span x-show="msg.burnAfterRead" class="tag tag-small tag-red">burn</span>
+                                    <span x-show="msg.geoLocked" class="tag tag-small tag-cyan">geo</span>
+                                    <span x-show="msg.expired" class="tag tag-small tag-dim">expired</span>
+                                </span>
+                            </div>
+                            <div class="msg-item-right">
+                                <span class="msg-time" x-text="formatTime(msg.createdAt)"></span>
+                                <span class="msg-countdown" x-show="!msg.expired" x-text="getCountdown(msg.expiresAt)"></span>
+                            </div>
                         </div>
-                        <div class="msg-item-right">
-                            <span class="msg-time" x-text="formatTime(msg.createdAt)"></span>
-                            <span class="msg-countdown" x-show="!msg.expired" x-text="getCountdown(msg.expiresAt)"></span>
-                        </div>
-                    </div>
-                </template>
+                    </template>
+                </div>
             </div>
         </div>
 
-        <!-- send message -->
+        <!-- ═══════════════════════════════════════
+             SEND MESSAGE
+        ════════════════════════════════════════ -->
         <div x-show="view === 'send'" class="window window-wide" x-transition>
-            <div class="window-title">[ send encrypted message ]</div>
-            <div class="window-body">
-                <div class="send-grid">
-                    <div class="send-form">
-                        <div class="field">
-                            <label>receiver</label>
-                            <input x-model="sendForm.receiver" type="text" placeholder="username">
+            <div class="window-inner">
+                <div class="window-title">[ send encrypted message ]</div>
+                <div class="window-body">
+                    <div class="send-grid">
+                        <div class="send-form">
+                            <div class="field">
+                                <label>receiver</label>
+                                <input x-model="sendForm.receiver" type="text" placeholder="username">
+                            </div>
+
+                            <div class="toggle-row">
+                                <button @click="sendMode = 'message'" :class="sendMode === 'message' ? 'btn btn-cyan btn-sm' : 'btn btn-dim btn-sm'">message</button>
+                                <button @click="sendMode = 'document'" :class="sendMode === 'document' ? 'btn btn-orange btn-sm' : 'btn btn-dim btn-sm'">document</button>
+                            </div>
+
+                            <div x-show="sendMode === 'message'" class="field">
+                                <label>message</label>
+                                <textarea x-model="sendForm.message" placeholder="your secret message..."></textarea>
+                            </div>
+
+                            <div x-show="sendMode === 'document'" class="field">
+                                <label>file (any type, max 10mb)</label>
+                                <input type="file" @change="handleFileUpload($event)" class="file-input">
+                                <span class="dim" x-show="sendForm.fileName" x-text="sendForm.fileName"></span>
+                            </div>
+
+                            <div class="options-row">
+                                <label class="toggle-label">
+                                    <input type="checkbox" x-model="sendForm.geoLocked">
+                                    <span>geo-lock</span>
+                                </label>
+                                <label class="toggle-label">
+                                    <input type="checkbox" x-model="sendForm.burnAfterRead">
+                                    <span>burn after read</span>
+                                </label>
+                            </div>
+
+                            <div x-show="sendForm.geoLocked" class="geo-info">
+                                <p class="dim" x-show="!sendForm.lat">click map to set geo-lock location</p>
+                                <p x-show="sendForm.lat" class="success">
+                                    locked: <span x-text="sendForm.lat?.toFixed(4) + ', ' + sendForm.lon?.toFixed(4)"></span>
+                                </p>
+                            </div>
+
+                            <button @click="sendMessage()" class="btn btn-green" :disabled="sending" :class="sending ? 'btn-loading' : ''">
+                                <span x-text="sending ? 'encrypting...' : '> transmit'"></span>
+                            </button>
+                            <p class="error" x-show="error" x-text="error"></p>
+                            <p class="success" x-show="info" x-text="info"></p>
                         </div>
 
-                        <div class="toggle-row">
-                            <button @click="sendMode = 'message'" :class="sendMode === 'message' ? 'btn btn-cyan btn-sm' : 'btn btn-dim btn-sm'">message</button>
-                            <button @click="sendMode = 'document'" :class="sendMode === 'document' ? 'btn btn-orange btn-sm' : 'btn btn-dim btn-sm'">document</button>
+                        <div class="send-map" :style="sendForm.geoLocked ? '' : 'display:none'">
+                            <div id="map" style="height:300px;width:100%"></div>
                         </div>
-
-                        <div x-show="sendMode === 'message'" class="field">
-                            <label>message</label>
-                            <textarea x-model="sendForm.message" placeholder="your secret message..."></textarea>
-                        </div>
-
-                        <div x-show="sendMode === 'document'" class="field">
-                            <label>file (any type, max 10mb)</label>
-                            <input type="file" @change="handleFileUpload($event)" class="file-input">
-                            <span class="dim" x-show="sendForm.fileName" x-text="sendForm.fileName"></span>
-                        </div>
-
-                        <div class="options-row">
-                            <label class="toggle-label">
-                                <input type="checkbox" x-model="sendForm.geoLocked">
-                                <span>geo-lock</span>
-                            </label>
-                            <label class="toggle-label">
-                                <input type="checkbox" x-model="sendForm.burnAfterRead">
-                                <span>burn after read</span>
-                            </label>
-                        </div>
-
-                        <div x-show="sendForm.geoLocked" class="geo-info">
-                            <p class="dim" x-show="!sendForm.lat">click map to set geo-lock location</p>
-                            <p x-show="sendForm.lat" class="success">
-                                locked: <span x-text="sendForm.lat?.toFixed(4) + ', ' + sendForm.lon?.toFixed(4)"></span>
-                            </p>
-                        </div>
-
-                        <button @click="sendMessage()" class="btn btn-green" :disabled="sending">
-                            <span x-text="sending ? 'encrypting...' : '> transmit'"></span>
-                        </button>
-                        <p class="error" x-show="error" x-text="error"></p>
-                        <p class="success" x-show="info" x-text="info"></p>
-                    </div>
-
-                    <div class="send-map" :style="sendForm.geoLocked ? '' : 'display:none'">
-                        <div id="map" style="height:300px;width:100%"></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- view message -->
+        <!-- ═══════════════════════════════════════
+             VIEW MESSAGE
+        ════════════════════════════════════════ -->
         <div x-show="view === 'view'" class="window window-wide" x-transition>
-            <div class="window-title">[ decrypt message ]
-                <span class="dim" x-show="currentMessage">from: <span x-text="currentMessage?.senderUsername"></span></span>
-            </div>
-            <div class="window-body">
-                <div x-show="currentMessage?.expired" class="expired-notice">
-                    [EXPIRED] this message has self-destructed. key shard deleted.
+            <div class="window-inner">
+                <div class="window-title">
+                    [ decrypt message ]
+                    <span class="dim" x-show="currentMessage">from: <span x-text="currentMessage?.senderUsername"></span></span>
                 </div>
-
-                <div x-show="!currentMessage?.expired && !decrypted">
-                    <div x-show="currentMessage?.geoLocked" class="geo-notice">
-                        this message is geo-locked. your location will be verified.
+                <div class="window-body">
+                    <div x-show="currentMessage?.expired" class="expired-notice">
+                        [EXPIRED] this message has self-destructed. key shard deleted.
                     </div>
-                    <button @click="decryptMessage()" class="btn btn-cyan" :disabled="decrypting">
-                        <span x-text="decrypting ? 'verifying location + decrypting...' : '> unlock + decrypt'"></span>
-                    </button>
-                </div>
 
-                <div x-show="decrypted && !currentMessage?.isDocument" class="decrypted-box">
-                    <div class="decrypted-header">
-                        <span class="tag tag-green">decrypted</span>
-                        <span class="dim" x-show="currentMessage?.burnAfterRead">message will be destroyed after closing</span>
+                    <div x-show="!currentMessage?.expired && !decrypted">
+                        <div x-show="currentMessage?.geoLocked" class="geo-notice">
+                            this message is geo-locked. your location will be verified.
+                        </div>
+                        <button @click="decryptMessage()" class="btn btn-cyan" :disabled="decrypting" :class="decrypting ? 'btn-loading' : ''">
+                            <span x-text="decrypting ? 'verifying location + decrypting...' : '> unlock + decrypt'"></span>
+                        </button>
                     </div>
-                    <div class="decrypted-content no-select" x-text="decrypted"></div>
-                    <div class="watermark" x-text="auth.username"></div>
-                </div>
 
-                <div x-show="decrypted && currentMessage?.isDocument" class="decrypted-box">
-                    <div class="decrypted-header">
-                        <span class="tag tag-orange">document decrypted</span>
+                    <div x-show="decrypted && !currentMessage?.isDocument" class="decrypted-box">
+                        <div class="decrypted-header">
+                            <span class="tag tag-green">decrypted</span>
+                            <span class="dim" x-show="currentMessage?.burnAfterRead">message will be destroyed after closing</span>
+                        </div>
+                        <div class="decrypted-content no-select" x-text="decrypted"></div>
+                        <div class="watermark" x-text="auth.username"></div>
                     </div>
-                    <button @click="downloadDecryptedFile()" class="btn btn-orange">
-                        > download <span x-text="currentMessage?.fileName"></span>
-                    </button>
-                </div>
 
-                <p class="error" x-show="error" x-text="error"></p>
-                <a href="#" @click.prevent="navigate('inbox')" class="back-link">&lt;-- back to inbox</a>
+                    <div x-show="decrypted && currentMessage?.isDocument" class="decrypted-box">
+                        <div class="decrypted-header">
+                            <span class="tag tag-orange">document decrypted</span>
+                        </div>
+                        <button @click="downloadDecryptedFile()" class="btn btn-orange">
+                            > download <span x-text="currentMessage?.fileName"></span>
+                        </button>
+                    </div>
+
+                    <p class="error" x-show="error" x-text="error"></p>
+                    <a href="#" @click.prevent="navigate('inbox')" class="back-link">&lt;-- back to inbox</a>
+                </div>
             </div>
         </div>
 
-        <!-- bottom status bar -->
+        <!-- ═══════════════════════════════════════
+             BOTTOM STATUS BAR
+        ════════════════════════════════════════ -->
         <footer class="statusbar-bottom" x-show="auth.loggedIn">
             <span class="dim">view: <span x-text="view"></span></span>
             <span class="dim">encryption: aes-256-gcm + rsa-2048</span>
