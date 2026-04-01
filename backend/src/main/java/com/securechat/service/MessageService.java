@@ -121,9 +121,6 @@ public class MessageService {
         }
 
         byte[] encryptedData = Base64.getDecoder().decode(encryptedPayloadBase64);
-        UUID msgId = UUID.randomUUID();
-        String encFileName = msgId + ".enc";
-        Files.write(imageStoragePath.resolve(encFileName), encryptedData);
 
         Instant now = Instant.now();
         Message message = Message.builder()
@@ -142,7 +139,13 @@ public class MessageService {
                 .fileSize(encryptedData.length > 0 ? (long) encryptedData.length : file.getSize())
                 .expiresAt(now.plusSeconds((long) expiryMinutes * 60))
                 .build();
-        return messageRepository.save(message);
+        Message saved = messageRepository.save(message);
+
+        // Save encrypted file using the actual message ID
+        String encFileName = saved.getId() + ".enc";
+        Files.write(imageStoragePath.resolve(encFileName), encryptedData);
+
+        return saved;
     }
 
     public List<Message> getInbox(String username) {

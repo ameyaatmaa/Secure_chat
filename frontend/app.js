@@ -299,14 +299,34 @@ function secureChat() {
                 if (msg.expired) { this.error = 'message has expired'; this.decrypting = false; return; }
 
                 if (msg.geoLocked) {
-                    const pos = await new Promise((resolve, reject) =>
-                        navigator.geolocation.getCurrentPosition(resolve, reject, {
-                            enableHighAccuracy: true,
-                            timeout: 15000,
-                            maximumAge: 0
-                        })
-                    );
-                    const { latitude: lat, longitude: lon } = pos.coords;
+                    let lat, lon;
+                    try {
+                        const pos = await new Promise((resolve, reject) =>
+                            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                                enableHighAccuracy: true,
+                                timeout: 15000,
+                                maximumAge: 60000
+                            })
+                        );
+                        lat = pos.coords.latitude;
+                        lon = pos.coords.longitude;
+                    } catch (geoErr) {
+                        // Geolocation failed — ask user to enter coords manually
+                        const coordStr = prompt('geolocation unavailable (http or denied). enter your coordinates as: lat,lon');
+                        if (!coordStr) {
+                            this.error = 'location required for geo-locked messages. allow location access or enter manually.';
+                            this.decrypting = false;
+                            return;
+                        }
+                        const parts = coordStr.split(',').map(s => parseFloat(s.trim()));
+                        if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) {
+                            this.error = 'invalid coordinates format. use: lat,lon';
+                            this.decrypting = false;
+                            return;
+                        }
+                        lat = parts[0];
+                        lon = parts[1];
+                    }
 
                     const verifyRes = await fetch('/api/location/verify', {
                         method: 'POST',
