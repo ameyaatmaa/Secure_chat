@@ -21,6 +21,7 @@ function secureChat() {
         sending: false,
         decrypting: false,
         map: null,
+        mapMarker: null,
         currentTime: '',
 
         async init() {
@@ -49,7 +50,11 @@ function secureChat() {
             this.decryptedFileBlob = null;
             this.view = v;
             if (v === 'inbox') this.loadInbox();
-            if (v === 'send') this.$nextTick(() => this.initMap());
+            if (v === 'send') {
+                // Destroy old map, wait for DOM, then init fresh
+                if (this.map) { this.map.remove(); this.map = null; }
+                setTimeout(() => this.initMap(), 500);
+            }
         },
 
         async derivePrivateKey(username, password) {
@@ -75,7 +80,7 @@ function secureChat() {
         async register() {
             this.error = '';
             this.loading = true;
-            this.info = 'generating rsa-2048 keypair...';
+            this.info = 'generating rsa-2048 keypair... (this takes ~15 seconds)';
             try {
                 const keypair = await this.derivePrivateKey(this.form.username, this.form.password);
                 const publicKeyPem = forge.pki.publicKeyToPem(keypair.publicKey);
@@ -93,7 +98,7 @@ function secureChat() {
                 this.info = 'registered. redirecting to login...';
                 setTimeout(() => { this.navigate('login'); this.loading = false; }, 1500);
             } catch (e) {
-                this.error = e.message;
+                this.error = e.message || String(e);
                 this.info = '';
                 this.loading = false;
             }
@@ -102,6 +107,7 @@ function secureChat() {
         async login() {
             this.error = '';
             this.loading = true;
+            this.info = 'deriving keys... (this takes ~15 seconds)';
             try {
                 const keypair = await this.derivePrivateKey(this.form.username, this.form.password);
                 const res = await fetch('/api/auth/login', {
@@ -110,12 +116,14 @@ function secureChat() {
                     body: JSON.stringify({ username: this.form.username, password: this.form.password })
                 });
                 const data = await res.json();
-                if (!res.ok) { this.error = data.error || 'invalid credentials'; this.loading = false; return; }
+                if (!res.ok) { this.error = data.error || 'invalid credentials'; this.info = ''; this.loading = false; return; }
                 this.auth = { loggedIn: true, username: data.username, privateKey: keypair.privateKey };
+                this.info = '';
                 this.loading = false;
                 this.navigate('inbox');
             } catch (e) {
-                this.error = e.message;
+                this.error = e.message || String(e);
+                this.info = '';
                 this.loading = false;
             }
         },
@@ -141,20 +149,39 @@ function secureChat() {
 
         initMap() {
             if (this.map) { this.map.remove(); this.map = null; }
+            this.mapMarker = null;
             const mapEl = document.getElementById('map');
-            if (!mapEl) return;
-            this.map = L.map('map').setView([20.5937, 78.9629], 5);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; CartoDB',
-                maxZoom: 19
-            }).addTo(this.map);
-            let marker = null;
-            this.map.on('click', (e) => {
-                if (marker) marker.remove();
-                marker = L.marker(e.latlng).addTo(this.map);
-                this.sendForm.lat = e.latlng.lat;
-                this.sendForm.lon = e.latlng.lng;
-            });
+            if (!mapEl) {
+                console.warn('Map element not found, retrying...');
+                setTimeout(() => this.initMap(), 200);
+                return;
+            }
+            // Check if the element has dimensions (not hidden by display:none)
+            if (mapEl.offsetWidth === 0) {
+                console.warn('Map element has zero width, retrying...');
+                setTimeout(() => this.initMap(), 200);
+                return;
+            }
+            try {
+                this.map = L.map('map', { scrollWheelZoom: true }).setView([20.5937, 78.9629], 5);
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; CartoDB',
+                    maxZoom: 19
+                }).addTo(this.map);
+                // Force recalculate after tiles load
+                setTimeout(() => { if (this.map) this.map.invalidateSize(); }, 200);
+                setTimeout(() => { if (this.map) this.map.invalidateSize(); }, 1000);
+                this.map.on('click', (e) => {
+                    if (this.mapMarker) this.map.removeLayer(this.mapMarker);
+                    this.mapMarker = L.marker(e.latlng).addTo(this.map);
+                    this.sendForm.lat = e.latlng.lat;
+                    this.sendForm.lon = e.latlng.lng;
+                    console.log('Map clicked, coordinates set:', e.latlng.lat, e.latlng.lng);
+                });
+                console.log('Map initialized successfully');
+            } catch (e) {
+                console.error('Map init failed:', e);
+            }
         },
 
         handleFileUpload(event) {
@@ -186,6 +213,16 @@ function secureChat() {
             return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
         },
 
+        // Helper to base64 encode without stack overflow for large arrays
+        arrayToBase64(uint8arr) {
+            let binary = '';
+            const chunk = 8192;
+            for (let i = 0; i < uint8arr.length; i += chunk) {
+                binary += String.fromCharCode.apply(null, uint8arr.subarray(i, i + chunk));
+            }
+            return btoa(binary);
+        },
+
         async sendMessage() {
             this.error = '';
             this.info = '';
@@ -213,13 +250,14 @@ function secureChat() {
                 const { publicKey: pubKeyPem } = await keyRes.json();
                 const receiverPublicKey = forge.pki.publicKeyFromPem(pubKeyPem);
 
+                // Generate AES key and split into shards
                 const aesKey = new Uint8Array(32);
                 crypto.getRandomValues(aesKey);
-
                 const shard1 = aesKey.slice(0, 16);
                 const shard2 = aesKey.slice(16, 32);
-                const shard2Base64 = btoa(String.fromCharCode(...shard2));
+                const shard2Base64 = this.arrayToBase64(shard2);
 
+                // Encrypt the payload
                 let payloadBytes;
                 if (this.sendMode === 'message') {
                     payloadBytes = new TextEncoder().encode(this.sendForm.message);
@@ -232,17 +270,20 @@ function secureChat() {
                 const importedKey = await crypto.subtle.importKey('raw', aesKey, 'AES-GCM', false, ['encrypt']);
                 const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, payloadBytes);
 
+                // Bundle: iv(12) + ciphertext
                 const payload = new Uint8Array(12 + ciphertext.byteLength);
                 payload.set(iv, 0);
                 payload.set(new Uint8Array(ciphertext), 12);
-                const payloadBase64 = btoa(String.fromCharCode(...payload));
+                const payloadBase64 = this.arrayToBase64(payload);
 
-                const shard1Bytes = forge.util.createBuffer(String.fromCharCode(...shard1));
-                const encryptedShard1 = receiverPublicKey.encrypt(shard1Bytes.data, 'RSA-OAEP', {
+                // RSA encrypt shard1
+                const shard1Str = String.fromCharCode.apply(null, shard1);
+                const encryptedShard1 = receiverPublicKey.encrypt(shard1Str, 'RSA-OAEP', {
                     md: forge.md.sha256.create()
                 });
                 const encryptedKeyBase64 = btoa(encryptedShard1);
 
+                // Build form data
                 const formData = new FormData();
                 formData.append('encryptedPayload', payloadBase64);
                 formData.append('encryptedKey', encryptedKeyBase64);
@@ -269,7 +310,8 @@ function secureChat() {
                 this.info = 'message transmitted successfully';
                 this.sendForm = { receiver: '', message: '', lat: null, lon: null, geoLocked: true, burnAfterRead: false, file: null, fileName: '' };
             } catch (e) {
-                this.error = 'error: ' + e.message;
+                console.error('Send error:', e);
+                this.error = 'error: ' + (e.message || String(e));
             }
             this.sending = false;
         },
@@ -292,12 +334,15 @@ function secureChat() {
             try {
                 let shard2;
 
+                // Fetch message metadata
                 const msgRes = await fetch('/api/messages/' + this.currentMessageId);
                 if (!msgRes.ok) { this.error = 'failed to load message'; this.decrypting = false; return; }
                 const msg = await msgRes.json();
+                console.log('Message metadata:', JSON.stringify(msg, null, 2));
 
                 if (msg.expired) { this.error = 'message has expired'; this.decrypting = false; return; }
 
+                // Get shard2 — either via geo-verify or directly
                 if (msg.geoLocked) {
                     let lat, lon;
                     try {
@@ -310,11 +355,12 @@ function secureChat() {
                         );
                         lat = pos.coords.latitude;
                         lon = pos.coords.longitude;
+                        console.log('Got GPS coords:', lat, lon);
                     } catch (geoErr) {
-                        // Geolocation failed — ask user to enter coords manually
-                        const coordStr = prompt('geolocation unavailable (http or denied). enter your coordinates as: lat,lon');
+                        console.log('Geolocation failed:', geoErr);
+                        const coordStr = prompt('geolocation unavailable. enter your coordinates as: lat,lon');
                         if (!coordStr) {
-                            this.error = 'location required for geo-locked messages. allow location access or enter manually.';
+                            this.error = 'location required for geo-locked messages.';
                             this.decrypting = false;
                             return;
                         }
@@ -334,9 +380,10 @@ function secureChat() {
                         body: JSON.stringify({ lat, lon, messageId: this.currentMessageId })
                     });
                     const verifyData = await verifyRes.json();
+                    console.log('Location verify result:', JSON.stringify(verifyData));
 
                     if (!verifyData.valid) {
-                        this.error = verifyData.message || 'location verification failed. you are ' + verifyData.distance + 'm away, need to be within ' + verifyData.radius + 'm';
+                        this.error = verifyData.message || 'location verification failed. distance: ' + verifyData.distance + 'm, radius: ' + verifyData.radius + 'm';
                         this.decrypting = false;
                         return;
                     }
@@ -346,27 +393,42 @@ function secureChat() {
                 }
 
                 if (!shard2) {
-                    this.error = 'key shard unavailable. message may have expired.';
+                    this.error = 'key shard unavailable. message may have expired or already been read (burn after read).';
                     this.decrypting = false;
                     return;
                 }
 
-                const encryptedShard1Bytes = atob(msg.encryptedKey);
-                const shard1Bytes = this.auth.privateKey.decrypt(encryptedShard1Bytes, 'RSA-OAEP', {
+                console.log('Got shard2, length:', shard2.length);
+
+                // RSA decrypt shard1
+                const encryptedShard1Raw = atob(msg.encryptedKey);
+                console.log('RSA ciphertext length:', encryptedShard1Raw.length);
+                const shard1Raw = this.auth.privateKey.decrypt(encryptedShard1Raw, 'RSA-OAEP', {
                     md: forge.md.sha256.create()
                 });
-                const shard1 = new Uint8Array(shard1Bytes.split('').map(c => c.charCodeAt(0)));
+                const shard1 = new Uint8Array(shard1Raw.length);
+                for (let i = 0; i < shard1Raw.length; i++) shard1[i] = shard1Raw.charCodeAt(i);
+                console.log('Decrypted shard1 length:', shard1.length);
 
-                const shard2Decoded = new Uint8Array(atob(shard2).split('').map(c => c.charCodeAt(0)));
+                // Decode shard2
+                const shard2Raw = atob(shard2);
+                const shard2Bytes = new Uint8Array(shard2Raw.length);
+                for (let i = 0; i < shard2Raw.length; i++) shard2Bytes[i] = shard2Raw.charCodeAt(i);
+                console.log('Decoded shard2 length:', shard2Bytes.length);
 
+                // Reconstruct AES key
                 const aesKey = new Uint8Array(32);
                 aesKey.set(shard1, 0);
-                aesKey.set(shard2Decoded, 16);
+                aesKey.set(shard2Bytes, 16);
+                console.log('AES key reconstructed, length:', aesKey.length);
 
                 if (msg.isDocument) {
+                    // Download and decrypt document
                     const fileRes = await fetch('/api/messages/' + this.currentMessageId + '/file');
+                    if (!fileRes.ok) { this.error = 'failed to download document'; this.decrypting = false; return; }
                     const encryptedBlob = await fileRes.blob();
                     const encryptedBytes = new Uint8Array(await encryptedBlob.arrayBuffer());
+                    console.log('Encrypted doc size:', encryptedBytes.length);
 
                     const iv = encryptedBytes.slice(0, 12);
                     const ciphertext = encryptedBytes.slice(12);
@@ -375,9 +437,13 @@ function secureChat() {
                     this.decryptedFileBlob = new Blob([plaintext]);
                     this.decrypted = 'document ready';
                 } else {
+                    // Download stego image and extract payload
                     const imgRes = await fetch('/api/messages/' + this.currentMessageId + '/image');
+                    if (!imgRes.ok) { this.error = 'failed to download image'; this.decrypting = false; return; }
                     const imgBlob = await imgRes.blob();
+                    console.log('Stego image size:', imgBlob.size);
                     const extractedPayload = await extractLsbPayload(imgBlob);
+                    console.log('Extracted payload length:', extractedPayload.length);
 
                     const iv = extractedPayload.slice(0, 12);
                     const ciphertext = extractedPayload.slice(12);
@@ -385,8 +451,10 @@ function secureChat() {
                     const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, importedKey, ciphertext);
                     this.decrypted = new TextDecoder().decode(plaintext);
                 }
+                console.log('Decryption successful!');
             } catch (e) {
-                this.error = 'decryption failed: ' + e.message;
+                console.error('Decryption error:', e);
+                this.error = 'decryption failed: ' + (e.message || e.toString());
             }
             this.decrypting = false;
         },
@@ -429,6 +497,7 @@ async function extractLsbPayload(imageBlob) {
             ctx.drawImage(img, 0, 0);
             const data = ctx.getImageData(0, 0, img.width, img.height).data;
 
+            // Read 32-bit header for payload length
             let headerBits = '';
             for (let i = 0; i < 32; i++) {
                 const pixelIdx = Math.floor(i / 3) * 4;
@@ -436,6 +505,7 @@ async function extractLsbPayload(imageBlob) {
                 headerBits += (data[pixelIdx + channel] & 1).toString();
             }
             const payloadLength = parseInt(headerBits, 2);
+            console.log('LSB header says payload length:', payloadLength);
             if (payloadLength <= 0 || payloadLength > 10_000_000) {
                 reject(new Error('invalid payload length: ' + payloadLength));
                 return;
@@ -453,7 +523,7 @@ async function extractLsbPayload(imageBlob) {
             }
             resolve(result);
         };
-        img.onerror = reject;
+        img.onerror = () => reject(new Error('failed to load stego image'));
         img.src = URL.createObjectURL(imageBlob);
     });
 }

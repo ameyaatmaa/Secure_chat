@@ -149,8 +149,8 @@
                         <p class="success" x-show="info" x-text="info"></p>
                     </div>
 
-                    <div class="send-map" x-show="sendForm.geoLocked">
-                        <div id="map"></div>
+                    <div class="send-map" :style="sendForm.geoLocked ? '' : 'display:none'">
+                        <div id="map" style="height:300px;width:100%"></div>
                     </div>
                 </div>
             </div>
