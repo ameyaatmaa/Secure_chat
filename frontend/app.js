@@ -65,7 +65,7 @@ function secureChat() {
             const prng = forge.random.createInstance();
             prng.seedFileSync = () => seed;
             return new Promise((resolve, reject) => {
-                forge.pki.rsa.generateKeyPair({ bits: 2048, workers: 2, prng }, (err, keypair) => {
+                forge.pki.rsa.generateKeyPair({ bits: 2048, workers: 0, prng }, (err, keypair) => {
                     if (err) reject(err);
                     else resolve(keypair);
                 });
