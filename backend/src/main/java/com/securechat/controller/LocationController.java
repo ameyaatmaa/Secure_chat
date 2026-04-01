@@ -77,9 +77,8 @@ public class LocationController {
 
         if (valid && message.getKeyShard() != null) {
             response.put("keyShard", message.getKeyShard());
-            if (message.getBurnAfterRead()) {
-                messageService.burnMessage(message.getId());
-            }
+            // Don't burn here — client needs to download file/image first
+            // Client calls POST /api/messages/{id}/burn after decryption
         } else if (!valid) {
             response.put("message", String.format("You are %d m away, need to be within %d m",
                     Math.round(distance), message.getRadiusMeters()));

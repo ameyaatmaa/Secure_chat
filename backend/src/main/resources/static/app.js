@@ -481,6 +481,12 @@ function secureChat() {
                     this.decrypted = new TextDecoder().decode(plaintext);
                 }
                 console.log('Decryption successful!');
+                // Burn after read: tell server to destroy the message now
+                if (msg.burnAfterRead) {
+                    fetch('/api/messages/' + this.currentMessageId + '/burn', { method: 'POST' })
+                        .then(() => console.log('Message burned'))
+                        .catch(() => {});
+                }
             } catch (e) {
                 console.error('Decryption error:', e);
                 this.error = 'decryption failed: ' + (e.message || e.toString());

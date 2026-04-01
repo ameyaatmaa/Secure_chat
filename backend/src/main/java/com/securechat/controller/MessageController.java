@@ -112,11 +112,21 @@ public class MessageController {
 
         if (!msg.getGeoLocked() && msg.getKeyShard() != null) {
             response.put("keyShard", msg.getKeyShard());
-            if (msg.getBurnAfterRead()) {
-                messageService.burnMessage(id);
-            }
+            // Don't burn here — let the client download the file/image first
+            // Burn happens on a separate POST /api/messages/{id}/burn call from the client
         }
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/burn")
+    public ResponseEntity<?> burnMessage(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable UUID id) {
+        Message msg = messageService.getMessage(id, user.getUsername());
+        if (msg.getBurnAfterRead()) {
+            messageService.burnMessage(id);
+        }
+        return ResponseEntity.ok(Map.of("burned", true));
     }
 
     @GetMapping("/{id}/image")
